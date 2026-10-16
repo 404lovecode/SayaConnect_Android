@@ -28,9 +28,9 @@ import kotlinx.coroutines.launch
 import org.webrtc.SurfaceViewRenderer
 
 /** Invite-only friend picker. 2–3 invited friends = 3–4 people total. */
-@Composable
+@Composable 
 fun GroupCallPicker(friends: List<Friend>, ui: String, onDismiss: () -> Unit,
-                    onStart: (List<Friend>, Boolean) -> Unit) {
+onStart: (List<Friend>, Boolean) -> Unit) {
     val selected = remember { mutableStateListOf<String>() }
     var voiceOnly by remember { mutableStateOf(false) }
     AlertDialog(
