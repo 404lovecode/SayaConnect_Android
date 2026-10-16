@@ -7,28 +7,35 @@ import androidx.compose.runtime.setValue
 
 class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences("sayaconnect_settings", Context.MODE_PRIVATE)
-    var uiLanguage by mutableStateOf(prefs.getString("uiLanguage", "en") ?: "en")
-        private set
-    var targetLanguage by mutableStateOf(prefs.getString("targetLanguage", "my") ?: "my")
-        private set
-    var darkMode by mutableStateOf(prefs.getString("darkMode", "system") ?: "system")
-        private set
-    var wallpaper by mutableStateOf(prefs.getString("wallpaper", "Aurora") ?: "Aurora")
-        private set
-    var customWallpaper by mutableStateOf(prefs.getString("customWallpaper", "") ?: "")
-        private set
-    var autoTranslate by mutableStateOf(prefs.getBoolean("autoTranslate", false))
-        private set
-    var lowData by mutableStateOf(prefs.getBoolean("lowData", true))
-        private set
 
-    fun setUiLanguage(v: String) { uiLanguage = v; prefs.edit().putString("uiLanguage", v).apply() }
-    fun setTargetLanguage(v: String) { targetLanguage = v; prefs.edit().putString("targetLanguage", v).apply() }
-    fun setDarkMode(v: String) { darkMode = v; prefs.edit().putString("darkMode", v).apply() }
-    fun setWallpaper(v: String) { wallpaper = v; prefs.edit().putString("wallpaper", v).apply() }
-    fun setCustomWallpaper(v: String) { customWallpaper = v; prefs.edit().putString("customWallpaper", v).apply() }
-    fun setAutoTranslate(v: Boolean) { autoTranslate = v; prefs.edit().putBoolean("autoTranslate", v).apply() }
-    fun setLowData(v: Boolean) { lowData = v; prefs.edit().putBoolean("lowData", v).apply() }
+    private var uiLanguageState by mutableStateOf(prefs.getString("uiLanguage", "en") ?: "en")
+    val uiLanguage: String get() = uiLanguageState
+
+    private var targetLanguageState by mutableStateOf(prefs.getString("targetLanguage", "my") ?: "my")
+    val targetLanguage: String get() = targetLanguageState
+
+    private var darkModeState by mutableStateOf(prefs.getString("darkMode", "system") ?: "system")
+    val darkMode: String get() = darkModeState
+
+    private var wallpaperState by mutableStateOf(prefs.getString("wallpaper", "Aurora") ?: "Aurora")
+    val wallpaper: String get() = wallpaperState
+
+    private var customWallpaperState by mutableStateOf(prefs.getString("customWallpaper", "") ?: "")
+    val customWallpaper: String get() = customWallpaperState
+
+    private var autoTranslateState by mutableStateOf(prefs.getBoolean("autoTranslate", false))
+    val autoTranslate: Boolean get() = autoTranslateState
+
+    private var lowDataState by mutableStateOf(prefs.getBoolean("lowData", true))
+    val lowData: Boolean get() = lowDataState
+
+    fun setUiLanguage(v: String) { uiLanguageState = v; prefs.edit().putString("uiLanguage", v).apply() }
+    fun setTargetLanguage(v: String) { targetLanguageState = v; prefs.edit().putString("targetLanguage", v).apply() }
+    fun setDarkMode(v: String) { darkModeState = v; prefs.edit().putString("darkMode", v).apply() }
+    fun setWallpaper(v: String) { wallpaperState = v; prefs.edit().putString("wallpaper", v).apply() }
+    fun setCustomWallpaper(v: String) { customWallpaperState = v; prefs.edit().putString("customWallpaper", v).apply() }
+    fun setAutoTranslate(v: Boolean) { autoTranslateState = v; prefs.edit().putBoolean("autoTranslate", v).apply() }
+    fun setLowData(v: Boolean) { lowDataState = v; prefs.edit().putBoolean("lowData", v).apply() }
 }
 
 val languages = linkedMapOf(
