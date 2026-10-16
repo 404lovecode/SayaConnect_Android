@@ -291,7 +291,7 @@ class ConnectRepository {
         val result = functions.getHttpsCallable("translateText")
             .call(mapOf("text" to text.take(4000), "target" to language)).await()
         @Suppress("UNCHECKED_CAST")
-        return (result.data as? Map<String, Any>)?.get("translated") as? String ?: text
+        return (result.getData() as? Map<String, Any>)?.get("translated") as? String ?: text
     }
 
     fun registerPush() {
