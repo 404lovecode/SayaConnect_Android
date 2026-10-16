@@ -1,0 +1,18 @@
+SayaConnect v3: Phone / Guest / Email login + group calls
+See LOGIN_OPTIONS_SETUP.md or LOGIN_OPTIONS_SETUP_MY.md before testing login.
+
+SAYACONNECT — WINDOWS ANDROID APP SOURCE
+========================================
+1. Open preview/index.html to see the UI design demo.
+2. Read README_EN.md (English) or README_MY.md (Burmese).
+3. Open THIS folder with Android Studio (contains settings.gradle.kts).
+4. Add your own Firebase app/google-services.json.
+5. Set up and deploy backend/ Firestore, Storage, Functions rules.
+6. Add a TURN server if reliable international video calls are needed.
+7. Android Studio -> Build -> Build APK(s).
+
+This ZIP DOES NOT CONTAIN AN APK. Source has NOT been compiled/tested
+in Android Studio in the packaging environment.
+
+Internet is required. VPN-free operation is not guaranteed.
+Burmese auto-translation uses a paid cloud service when enabled.

@@ -1,0 +1,283 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isFriend(other) {
+      return signed() && exists(/databases/$(database)/documents/users/$(me())/friends/$(other));
+    }
+    function member(room) { return signed() && me() in room.members; }
+    function callParty(call) { return signed() && (call.from == me() || call.to == me()); }
+    function groupDoc(id) {
+      return get(/databases/$(database)/documents/groupCalls/$(id)).data;
+    }
+    function groupMember(id) {
+      return signed() && me() in groupDoc(id).members;
+    }
+    function groupJoined(id) {
+      return groupMember(id) && groupDoc(id).status == 'active'
+        && groupDoc(id).memberStates[me()] == 'joined';
+    }
+
+
+    match /handles/{handle} {
+      allow get: if signed();
+      allow list: if false;
+      allow create: if signed()
+        && handle.matches('^[a-z0-9_]{3,20}$')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == me()
+        && getAfter(/databases/$(database)/documents/users/$(me())).data.username == handle;
+      allow update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if signed();
+      allow list: if false;
+      allow create: if signed() && me() == userId
+        && request.resource.data.keys().hasOnly(['username', 'displayName', 'bio', 'musicUrl', 'avatarUrl', 'createdAt'])
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('^[a-z0-9_]{3,20}$')
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2 && request.resource.data.displayName.size() <= 50
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 2000
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/handles/$(request.resource.data.username)).data.uid == userId;
+      allow update: if signed() && me() == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'bio', 'musicUrl', 'avatarUrl'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2 && request.resource.data.displayName.size() <= 50
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 2000
+        && request.resource.data.musicUrl is string
+        && request.resource.data.musicUrl.size() <= 2048
+        && request.resource.data.avatarUrl is string
+        && request.resource.data.avatarUrl.size() <= 2048;
+      allow delete: if false;
+
+      match /friends/{friendUid} {
+        allow read: if signed() && me() == userId;
+        // Recipient of accepted request creates both reciprocal friend documents in one batch.
+        allow create: if signed()
+          && request.resource.data.keys().hasOnly(['username', 'displayName'])
+          && (
+            (me() == userId
+              && existsAfter(/databases/$(database)/documents/friendRequests/$(friendUid + '_' + userId))
+              && getAfter(/databases/$(database)/documents/friendRequests/$(friendUid + '_' + userId)).data.status == 'accepted')
+            ||
+            (me() == friendUid
+              && existsAfter(/databases/$(database)/documents/friendRequests/$(userId + '_' + friendUid))
+              && getAfter(/databases/$(database)/documents/friendRequests/$(userId + '_' + friendUid)).data.status == 'accepted')
+          );
+        allow update, delete: if false;
+      }
+    }
+
+    match /friendRequests/{requestId} {
+      allow read: if signed() && (resource.data.from == me() || resource.data.to == me());
+      allow create: if signed()
+        && request.resource.data.keys().hasOnly(['from','to','status','fromName','fromUsername','createdAt'])
+        && request.resource.data.from == me()
+        && request.resource.data.to != me()
+        && requestId == me() + '_' + request.resource.data.to
+        && request.resource.data.status == 'requested'
+        && request.resource.data.createdAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.to));
+      allow update: if signed() && resource.data.to == me()
+        && resource.data.status == 'requested'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['accepted', 'declined'];
+      allow delete: if false;
+    }
+
+    match /rooms/{roomId} {
+      allow get: if member(resource.data);
+      allow list: if false;
+      allow create: if signed()
+        && request.resource.data.keys().hasOnly(['members','lastText','createdAt'])
+        && request.resource.data.members is list
+        && request.resource.data.members.size() == 2
+        && me() in request.resource.data.members
+        && request.resource.data.members[0] != request.resource.data.members[1]
+        && (
+          (request.resource.data.members[0] == me() && isFriend(request.resource.data.members[1]))
+          ||
+          (request.resource.data.members[1] == me() && isFriend(request.resource.data.members[0]))
+        )
+        && request.resource.data.createdAt == request.time;
+      allow update: if member(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastText','lastAt'])
+        && request.resource.data.lastText is string
+        && request.resource.data.lastText.size() <= 100;
+      allow delete: if false;
+      match /messages/{messageId} {
+        allow read: if signed() && me() in get(/databases/$(database)/documents/rooms/$(roomId)).data.members;
+        allow create: if signed()
+          && me() in get(/databases/$(database)/documents/rooms/$(roomId)).data.members
+          && request.resource.data.keys().hasOnly(['sender','text','at'])
+          && request.resource.data.sender == me()
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 4000
+          && request.resource.data.at == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    match /calls/{callId} {
+      allow get, list: if callParty(resource.data);
+      allow create: if signed()
+        && request.resource.data.keys().hasOnly(['from','to','fromName','roomId','status','lowData','createdAt'])
+        && request.resource.data.from == me()
+        && request.resource.data.to != me()
+        && request.resource.data.status == 'ringing'
+        && isFriend(request.resource.data.to)
+        && request.resource.data.createdAt == request.time;
+      allow update: if callParty(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','offer','answer'])
+        && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offer'])
+            && me() == resource.data.from && !('offer' in resource.data))
+          ||
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer'])
+            && me() == resource.data.to && !('answer' in resource.data))
+          ||
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+            && (
+              (resource.data.status == 'ringing' && me() == resource.data.to
+                && request.resource.data.status in ['accepted','declined'])
+              || (resource.data.status in ['ringing','accepted'] && request.resource.data.status == 'ended')
+            ))
+        );
+      allow delete: if false;
+      match /candidates/{candidateId} {
+        allow read: if callParty(get(/databases/$(database)/documents/calls/$(callId)).data);
+        allow create: if callParty(get(/databases/$(database)/documents/calls/$(callId)).data)
+          && request.resource.data.keys().hasOnly(['sender','candidate','sdpMid','sdpMLineIndex'])
+          && request.resource.data.sender == me()
+          && request.resource.data.candidate is string && request.resource.data.candidate.size() <= 4096;
+        allow update, delete: if false;
+      }
+      match /reactions/{reactionId} {
+        allow read: if callParty(get(/databases/$(database)/documents/calls/$(callId)).data);
+        allow create: if callParty(get(/databases/$(database)/documents/calls/$(callId)).data)
+          && request.resource.data.keys().hasOnly(['sender','emoji','at'])
+          && request.resource.data.sender == me()
+          && request.resource.data.emoji is string && request.resource.data.emoji.size() <= 12
+          && request.resource.data.at == request.time;
+        allow update, delete: if false;
+      }
+    }
+    // A room is immutable except for the host ending it and invited members
+    // updating ONLY their own state. No client can invite new members later.
+    match /groupCalls/{groupId} {
+      allow get, list: if signed() && me() in resource.data.members;
+      allow create: if signed()
+        && request.resource.data.keys().hasOnly([
+          'host','hostName','members','names','memberStates','mode','status','createdAt'])
+        && request.resource.data.host == me()
+        && request.resource.data.hostName is string
+        && request.resource.data.hostName.size() <= 70
+        && request.resource.data.status == 'active'
+        && request.resource.data.mode in ['video','audio']
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.members is list
+        && request.resource.data.members.size() in [3,4]
+        && request.resource.data.members[0] == me()
+        && request.resource.data.members.toSet().size() == request.resource.data.members.size()
+        && request.resource.data.names is map
+        && request.resource.data.names.keys().toSet() == request.resource.data.members.toSet()
+        && request.resource.data.memberStates is map
+        && request.resource.data.memberStates.keys().toSet() == request.resource.data.members.toSet()
+        && request.resource.data.memberStates[me()] == 'joined'
+        && request.resource.data.memberStates[request.resource.data.members[1]] == 'invited'
+        && request.resource.data.memberStates[request.resource.data.members[2]] == 'invited'
+        && isFriend(request.resource.data.members[1])
+        && isFriend(request.resource.data.members[2])
+        && (request.resource.data.members.size() == 3
+          || (request.resource.data.memberStates[request.resource.data.members[3]] == 'invited'
+              && isFriend(request.resource.data.members[3])));
+      allow update: if signed() && me() in resource.data.members
+        && (
+          // Ending the entire room belongs to the creator.
+          (me() == resource.data.host
+            && resource.data.status == 'active'
+            && request.resource.data.status == 'ended'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+          ||
+          // Individual guests can only accept, decline, or leave their own invite.
+          (me() != resource.data.host
+            && resource.data.status == 'active'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberStates'])
+            && request.resource.data.memberStates.diff(resource.data.memberStates)
+                .affectedKeys().hasOnly([me()])
+            && ((resource.data.memberStates[me()] == 'invited'
+                && request.resource.data.memberStates[me()] in ['joined','declined'])
+               || (resource.data.memberStates[me()] == 'joined'
+                && request.resource.data.memberStates[me()] == 'left')))
+        );
+      allow delete: if false;
+      match /pairs/{pairId} {
+        // A group member may read connection metadata. Only the two endpoints
+        // may write SDP and ICE; other participants cannot impersonate them.
+        allow get, list: if groupJoined(groupId);
+        allow create: if groupJoined(groupId)
+          && request.resource.data.keys().hasOnly(['a','b','createdAt'])
+          && request.resource.data.a == me()
+          && request.resource.data.a < request.resource.data.b
+          && request.resource.data.b in groupDoc(groupId).members
+          && groupDoc(groupId).memberStates[request.resource.data.b] == 'joined'
+          && pairId == request.resource.data.a + '_' + request.resource.data.b
+          && request.resource.data.createdAt == request.time;
+        allow update: if groupJoined(groupId)
+          && ((me() == resource.data.a
+            && !('offer' in resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offer'])
+            && request.resource.data.offer.keys().hasOnly(['sdp'])
+            && request.resource.data.offer.sdp is string
+            && request.resource.data.offer.sdp.size() <= 120000)
+            || (me() == resource.data.b
+            && 'offer' in resource.data
+            && !('answer' in resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer'])
+            && request.resource.data.answer.keys().hasOnly(['sdp'])
+            && request.resource.data.answer.sdp is string
+            && request.resource.data.answer.sdp.size() <= 120000));
+        allow delete: if false;
+        match /candidates/{candidateId} {
+          allow read: if groupJoined(groupId);
+          allow create: if groupJoined(groupId)
+            && request.resource.data.keys().hasOnly(['sender','candidate','sdpMid','sdpMLineIndex'])
+            && request.resource.data.sender == me()
+            && me() in [get(/databases/$(database)/documents/groupCalls/$(groupId)/pairs/$(pairId)).data.a,
+                         get(/databases/$(database)/documents/groupCalls/$(groupId)/pairs/$(pairId)).data.b]
+            && request.resource.data.candidate is string
+            && request.resource.data.candidate.size() <= 4096
+            && request.resource.data.sdpMid is string
+            && request.resource.data.sdpMLineIndex is int;
+          allow update, delete: if false;
+        }
+      }
+      match /reactions/{reactionId} {
+        allow read: if groupJoined(groupId);
+        allow create: if groupJoined(groupId)
+          && request.resource.data.keys().hasOnly(['sender','emoji','at'])
+          && request.resource.data.sender == me()
+          && request.resource.data.emoji is string
+          && request.resource.data.emoji.size() <= 12
+          && request.resource.data.at == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    match /pushTokens/{userId} {
+      allow read: if signed() && me() == userId;
+      allow create, update: if signed() && me() == userId
+        && request.resource.data.keys().hasOnly(['token','updatedAt'])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() <= 4096;
+      allow delete: if signed() && me() == userId;
+    }
+    match /translationUsage/{usageId} { allow read, write: if false; }
+    match /{anyPath=**} { allow read, write: if false; }
+  }
+}
