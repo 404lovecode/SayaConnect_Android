@@ -21,14 +21,17 @@ jobs:
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"; fi
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)"; fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Isolate the Dicky build from existing project wrappers
         run: rm -rf gradle/wrapper
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.11.1'
       - name: Extract project
-        run: unzip -q dicky-hdr-android-project.zip
+        run: |
+          unzip -q dicky-hdr-android-project.zip
+          sed -i 's/compileSdk 35/compileSdk 36/' dicky-hdr-android/app/build.gradle
+          sed -i 's/8.7.3/8.10.1/' dicky-hdr-android/build.gradle
       - name: Build APK
         working-directory: dicky-hdr-android
         run: gradle --no-daemon :app:assembleDebug
