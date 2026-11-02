@@ -17,15 +17,17 @@ jobs:
           java-version: '17'
       - name: Install Android SDK API 35
         run: |
-          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          sdkmanager --licenses < /dev/zero || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"; fi
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)"; fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Extract Dicky HDR Studio project
+      - name: Extract project
         run: unzip -q dicky-hdr-android-project.zip
-      - name: Build installable APK
+      - name: Build APK
         working-directory: dicky-hdr-android
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
